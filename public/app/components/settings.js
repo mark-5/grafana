@@ -19,6 +19,13 @@ function (_) {
         'singlestat': { path: 'panels/singlestat', name: 'Single stat' },
         'text':       { path: 'panels/text',       name: 'Text' },
         'dashlist':   { path: 'panels/dashlist',   name: 'Dashboard list' },
+        // new panels need to be added here
+        'extension':  {
+          // nothing special about the plugins path
+          //   it's just cleaner to deploy here
+          path: 'plugins/panels/extension',
+          name: 'Extension'
+        },
       },
       new_panel_title: 'no title (click here)',
       plugins: {},
