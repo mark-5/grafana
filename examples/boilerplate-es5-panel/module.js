@@ -3,6 +3,7 @@ define([
   'lodash',
   './css/styles.css!'
 ], function(sdk, _) {
+  'use strict';
 
   var BoilerPlatePanelCtrl = (function(_super) {
     var self;
@@ -10,7 +11,7 @@ define([
     function BoilerPlatePanelCtrl($scope, $injector) {
       _super.call(this, $scope, $injector);
 
-      this.results = []
+      this.results = [];
 
       self = this;
     }
@@ -29,25 +30,23 @@ define([
         .then(function(result) {
           self.results = [];
           _.each(result.data, function(target) {
-            var last = _.last(target.datapoints)
+            var last = _.last(target.datapoints);
             self.results.push(last[0]);
           });
 
           self.render();
         });
-    }
+    };
 
     BoilerPlatePanelCtrl.prototype.render = function() {
       this.values = this.results.join(',');
-    }
+    };
 
     return BoilerPlatePanelCtrl;
 
   })(sdk.MetricsPanelCtrl);
 
-
   return {
     PanelCtrl: BoilerPlatePanelCtrl
   };
 });
-
