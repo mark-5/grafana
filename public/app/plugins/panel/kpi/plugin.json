@@ -1,0 +1,6 @@
+{
+  "type": "panel",
+  "name": "KPI",
+  "id": "kpi",
+  "staticRoot": "."
+}
