@@ -3,6 +3,7 @@
 import config from 'app/core/config';
 import $ from 'jquery';
 import _ from 'lodash';
+import d3 from 'd3';
 import kbn from 'app/core/utils/kbn';
 import {PanelCtrl} from 'app/plugins/sdk';
 
@@ -10,10 +11,10 @@ class DashboardModel {
 
   id:          number;
   panels:      PanelModel[];
-  datasources: Object;
   templating:  Object;
   title:       string;
   uid:         string;
+  uri:         string;
 
   constructor(dashboard: Object) {
     this.id         = dashboard['dashboard']['id'];
@@ -21,22 +22,17 @@ class DashboardModel {
     this.title      = dashboard['dashboard']['title'];
     this.uid        = _.uniqueId();
 
+    var uri = '/dashboard';
+    uri    += '/'+dashboard['meta']['type'];
+    uri    += '/'+dashboard['meta']['slug'];
+    this.uri = uri;
+
     var panels = this.panels = [];
     for (let row of dashboard['dashboard']['rows']) {
       for (let panel of row['panels']) {
         panels.push(new PanelModel(panel));
       }
     }
-
-    var datasources = this.datasources = {};
-    for (let panel of panels) {
-      var targets = panel.targets;
-      if (!targets) { continue; }
-
-      var datasource = panel.datasource || config.defaultDatasource;
-      if (!datasources[datasource]) { datasources[datasource] = []; }
-      [].push.apply(datasources[datasource], targets);
-    };
   };
 
 };
@@ -45,6 +41,7 @@ class PanelModel {
 
   datasource: string;
   id:         number;
+  scopedVars: Object;
   targets:    Object[];
   thresholds: Object;
   title:      string;
@@ -53,6 +50,7 @@ class PanelModel {
   constructor(panel: Object) {
     this.datasource = panel['datasource'];
     this.id         = panel['id'];
+    this.scopedVars = panel['scopedVars'];
     this.targets    = panel['targets'];
     this.title      = panel['title'];
     this.uid        = _.uniqueId();
@@ -93,14 +91,14 @@ class PanelModel {
   };
 
   getThresholdState(value: number) {
-    if (!this.thresholds) { return 'OK'; }
+    if (!this.thresholds) { return 0; }
 
     if (this.isCritical(value)) {
-      return 'CRITICAL';
+      return 2;
     } else if (this.isWarning(value)) {
-      return 'WARNING';
+      return 1;
     } else {
-      return 'OK';
+      return 0;
     }
   }
 
@@ -131,12 +129,15 @@ class PanelModel {
 class KPICtrl extends PanelCtrl {
   static templateUrl = 'panel.html';
 
-  backendSrv:    any;
-  dashboardSrv:  any;
-  datasourceSrv: any;
-  templateSrv:   any;
-  timeSrv:       any;
+  backendSrv:         any;
+  dashboardSrv:       any;
+  dashboardLoaderSrv: any;
+  datasourceSrv:      any;
+  templateSrv:        any;
+  timeSrv:            any;
+  $location:          any;
 
+  $el:  any;
   data: any;
   private dashboards: DashboardModel[];
 
@@ -149,13 +150,20 @@ class KPICtrl extends PanelCtrl {
   constructor($scope, $injector) {
     super($scope, $injector);
 
-    this.backendSrv    = $injector.get('backendSrv');
-    this.dashboardSrv  = $injector.get('dashboardSrv');
-    this.datasourceSrv = $injector.get('datasourceSrv');
-    this.templateSrv   = $injector.get('templateSrv');
-    this.timeSrv       = $injector.get('timeSrv');
+    this.backendSrv         = $injector.get('backendSrv');
+    this.dashboardSrv       = $injector.get('dashboardSrv');
+    this.dashboardLoaderSrv = $injector.get('dashboardLoaderSrv');
+    this.datasourceSrv      = $injector.get('datasourceSrv');
+    this.templateSrv        = $injector.get('templateSrv');
+    this.timeSrv            = $injector.get('timeSrv');
+    this.$location          = $injector.get('$location');
 
     this.events.on('refresh', this.onRefresh.bind(this));
+    this.events.on('render',  this.onRender.bind(this));
+    this.events.on('data-received', data => {
+      this.data = data;
+      this.render();
+    });
   };
 
   private onRefresh(dataList) {
@@ -165,7 +173,6 @@ class KPICtrl extends PanelCtrl {
     var queries = this.queryDashboards(dashboards);
     var data    = queries.then(this.handleQueryResult.bind(this));
     data.then(data => {
-      this.data = data;
       this.events.emit('data-received', data);
     });
   };
@@ -195,7 +202,7 @@ class KPICtrl extends PanelCtrl {
   };
 
   private handleQueryResult(results) {
-    var states = {};
+    var data = [];
 
     for (let result of results) {
       if (!(result && result.data)) { continue; }
@@ -204,22 +211,26 @@ class KPICtrl extends PanelCtrl {
       var panel = _.find(dashboard.panels, {uid: result.panel});
       if (!panel) { continue; }
 
+      var scopedVars  = this.getScopedVars(panel, dashboard);
+      var templateSrv = this.templateSrv;
+
       for (let datum of result.data) {
         if (!datum && datum.datapoints) { continue; }
 
         var value = _.last(datum.datapoints)[0];
         var state = panel.getThresholdState(value);
-        if (!states[state]) { states[state] = []; }
-        states[state].push({
-          dashboard: dashboard.title,
-          panel:     panel.title,
+        data.push({
+          dashboard: templateSrv.replace(dashboard.title, scopedVars),
+          panel:     templateSrv.replace(panel.title, scopedVars),
+          state:     state,
           target:    datum.target,
+          uri:       dashboard.uri,
           value:     value,
         });
       }
     }
 
-    return states;
+    return data;
   };
 
   private queryDashboards(dashboards: Promise<DashboardModel[]>) {
@@ -233,7 +244,7 @@ class KPICtrl extends PanelCtrl {
 
           var datasource = panel.datasource;
           var targets    = panel.targets;
-          var scopedVars = self.getScopedVars(dashboard);
+          var scopedVars = self.getScopedVars(panel, dashboard);
           var params     = {dashboard: dashboard.uid, panel: panel.uid};
 
           var query = self.issueQueries(datasource, targets, scopedVars)
@@ -248,10 +259,10 @@ class KPICtrl extends PanelCtrl {
     return queries;
   };
 
-  private getScopedVars(dashboard: DashboardModel) {
+  private getScopedVars(panel: PanelModel, dashboard: DashboardModel) {
     var templateSrv = this.templateSrv;
 
-    var scopedVars = {};
+    var dashboardScopedVars = {};
     for (let variable of dashboard.templating['list']) {
       var name  = variable.name;
       var value = variable.current;
@@ -259,10 +270,10 @@ class KPICtrl extends PanelCtrl {
       if (templateSrv.isAllValue(value.value)) {
         value = _.extend({}, value, {value: templateSrv.getAllValue(variable)});
       }
-      scopedVars[name] = value;
+      dashboardScopedVars[name] = value;
     }
 
-    return scopedVars;
+    return _.extend({}, dashboardScopedVars, panel.scopedVars || {});
   };
 
   private issueQueries(datasourceName: string, targets: Object[], scopedVars: Object) {
@@ -286,22 +297,72 @@ class KPICtrl extends PanelCtrl {
       });
   };
 
-  link (scope, elem, attrs, ctrl) {
-    var $placeholder = elem.find('.panel-boilerplate-values');
-    this.events.on('data-received', data => {
-      var text = '';
-      if (data['CRITICAL']) {
-        text += 'CRITICAL: ';
-        text += _.map(data['CRITICAL'], datum => { return datum.panel; }).join(', ');
-      } else if (data['WARNING']) {
-        text += 'WARNING: ';
-        text += _.map(data['WARNING'], datum => { return datum.panel; }).join(', ');
-      } else {
-        text += 'everything is AWESOME';
-      }
-      $placeholder.text(text);
-    });
+  link(scope, elem, attrs, ctrl) {
+    this.$el = elem.find('.kpi-container');
   }
+
+  onRender() {
+    var $el = this.$el;
+    $el.html('');
+
+    var maxRows = 10;
+    var curRow = 0;
+    var curCol = 0;
+    var cells = _.map(this.data, datum => {
+      var cell = _.extend({}, datum, {row: curRow, col: curCol});
+      if (curRow === maxRows - 1) {
+        curRow = 0;
+        curCol += 1;
+      } else {
+        curRow += 1;
+      }
+      return cell;
+    });
+
+    var colors = ['green', 'orange', 'red'];
+    var gridSize = 50,
+        h = gridSize,
+        w = gridSize;
+
+    var svg = d3.select('.kpi-container')
+      .append('svg')
+      .append('g');
+
+    var heatMap = svg.selectAll('.heatmap')
+      .data(cells, d => { return d.col + ':' + d.row; })
+      .enter().append('svg:rect')
+        .attr("x",       d => { return d.row * w;       })
+        .attr("y",       d => { return d.col * h;       })
+        .attr("width",   d => { return w;               })
+        .attr("height",  d => { return h;               })
+        .style("fill",   d => { return colors[d.state]; });
+
+    var tooltip;
+    var getToolTip = () => {
+      if (tooltip) { return tooltip; }
+      return tooltip = d3.select("body")
+        .append("div")
+        .attr("class", "grafana-tooltip")
+        .style("position", "absolute")
+        .style("z-index", "10");
+    };
+
+    var removeToolTip = () => {
+      if (!tooltip) { return; }
+      tooltip.remove();
+      tooltip = null;
+    };
+
+    var $location = this.$location;
+    var $timeout  = this.$timeout;
+    heatMap
+      .on("mouseover", d => {return getToolTip().text(d.dashboard+': '+d.panel);})
+      .on("mousemove", d => {return getToolTip().style("top", (d3.event.pageY-15)+"px").style("left",(d3.event.pageX+20)+"px");})
+      .on("mouseout", d => {return removeToolTip();})
+      .on("click", d => { return $timeout(() => { removeToolTip(); $location.url(d.uri); }); });
+
+  };
+
 }
 
 export {KPICtrl as PanelCtrl};
