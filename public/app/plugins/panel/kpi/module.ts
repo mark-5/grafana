@@ -141,6 +141,13 @@ class KPICtrl extends PanelCtrl {
   data: any;
   private dashboards: DashboardModel[];
 
+  dashboard:        Object;
+  dashboardOptions: Object[];
+  panelDefaults = {
+    gridSize: 50,
+    maxRows: 10,
+  };
+
   interval:   any;
   range:      any;
   rangeRaw:   any;
@@ -149,6 +156,7 @@ class KPICtrl extends PanelCtrl {
   /** @ngInject */
   constructor($scope, $injector) {
     super($scope, $injector);
+    _.defaults(this.panel, this.panelDefaults);
 
     this.backendSrv         = $injector.get('backendSrv');
     this.dashboardSrv       = $injector.get('dashboardSrv');
@@ -158,6 +166,7 @@ class KPICtrl extends PanelCtrl {
     this.timeSrv            = $injector.get('timeSrv');
     this.$location          = $injector.get('$location');
 
+    this.events.on('init-edit-mode', this.onInitEditMode.bind(this));
     this.events.on('refresh', this.onRefresh.bind(this));
     this.events.on('render',  this.onRender.bind(this));
     this.events.on('data-received', data => {
@@ -166,11 +175,29 @@ class KPICtrl extends PanelCtrl {
     });
   };
 
+  private onInitEditMode() {
+    this.addEditorTab('Options', 'public/app/plugins/panel/kpi/editor.html');
+    this.editorTabIndex = 1;
+  };
+
   private onRefresh(dataList) {
     var dashboards = this.getDashboards();
-    dashboards.then(dashboards => { this.dashboards = dashboards; });
+    dashboards.then(dashboards => {
+      this.dashboards = dashboards;
+      this.dashboardOptions = _.map(dashboards, d => { return {id: d.id, title: d.title}; });
+    });
 
-    var queries = this.queryDashboards(dashboards);
+    var selected ;
+    if (this.panel.dashboard) {
+      var want = this.panel.dashboard;
+      selected = dashboards.then(dashboards => {
+        return _.where(dashboards, {id: want});
+      });
+    }
+    if (!selected) { return; }
+    console.log({selected: selected});
+
+    var queries = this.queryDashboards(selected);
     var data    = queries.then(this.handleQueryResult.bind(this));
     data.then(data => {
       this.events.emit('data-received', data);
@@ -305,7 +332,7 @@ class KPICtrl extends PanelCtrl {
     var $el = this.$el;
     $el.html('');
 
-    var maxRows = 10;
+    var maxRows = this.panel.maxRows || 10;
     var curRow = 0;
     var curCol = 0;
     var cells = _.map(this.data, datum => {
@@ -320,11 +347,11 @@ class KPICtrl extends PanelCtrl {
     });
 
     var colors = ['green', 'orange', 'red'];
-    var gridSize = 50,
+    var gridSize = this.panel.gridSize || 50,
         h = gridSize,
         w = gridSize;
 
-    var svg = d3.select('.kpi-container')
+    var svg = d3.select($el[0])
       .append('svg')
       .append('g');
 
