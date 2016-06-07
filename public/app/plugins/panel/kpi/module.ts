@@ -1,9 +1,10 @@
 ///<reference path="../../../headers/common.d.ts" />
+///<reference path="./d3.d.ts" />
 
 import config from 'app/core/config';
 import $ from 'jquery';
 import _ from 'lodash';
-import d3 from 'd3';
+import d3 from './d3';
 import kbn from 'app/core/utils/kbn';
 import {PanelCtrl} from 'app/plugins/sdk';
 
@@ -195,7 +196,6 @@ class KPICtrl extends PanelCtrl {
       });
     }
     if (!selected) { return; }
-    console.log({selected: selected});
 
     var queries = this.queryDashboards(selected);
     var data    = queries.then(this.handleQueryResult.bind(this));
