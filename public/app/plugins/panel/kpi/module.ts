@@ -127,7 +127,7 @@ class PanelModel {
 };
 
 class KPICtrl extends PanelCtrl {
-  static templateUrl = 'panel.html';
+  static templateUrl = 'module.html';
 
   backendSrv:         any;
   dashboardSrv:       any;

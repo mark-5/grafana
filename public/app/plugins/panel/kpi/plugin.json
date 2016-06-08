@@ -2,5 +2,12 @@
   "type": "panel",
   "name": "KPI",
   "id": "kpi",
-  "staticRoot": "."
+  "staticRoot": ".",
+
+  "info": {
+    "author": {
+      "name": "Mark Flickinger",
+      "url": "https://github.com/mark-5/grafana/tree/kpi"
+    }
+  }
 }
