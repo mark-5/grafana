@@ -1,12 +1,11 @@
 ///<reference path="../../../headers/common.d.ts" />
-///<reference path="./d3.d.ts" />
 
 import config from 'app/core/config';
 import $ from 'jquery';
 import _ from 'lodash';
-import d3 from './d3';
 import kbn from 'app/core/utils/kbn';
-import {PanelCtrl} from 'app/plugins/sdk';
+import {KPIRenderer} from './renderer';
+import {PanelCtrl}   from 'app/plugins/sdk';
 
 class DashboardModel {
 
@@ -138,7 +137,6 @@ class KPICtrl extends PanelCtrl {
   timeSrv:            any;
   $location:          any;
 
-  $el:  any;
   data: any;
   private dashboards: DashboardModel[];
 
@@ -169,7 +167,6 @@ class KPICtrl extends PanelCtrl {
 
     this.events.on('init-edit-mode', this.onInitEditMode.bind(this));
     this.events.on('refresh', this.onRefresh.bind(this));
-    this.events.on('render',  this.onRender.bind(this));
     this.events.on('data-received', data => {
       this.data = data;
       this.render();
@@ -325,70 +322,20 @@ class KPICtrl extends PanelCtrl {
   };
 
   link(scope, elem, attrs, ctrl) {
-    this.$el = elem.find('.kpi-container');
-  }
-
-  onRender() {
-    var $el = this.$el;
-    $el.html('');
-
-    var maxRows = this.panel.maxRows || 10;
-    var curRow = 0;
-    var curCol = 0;
-    var cells = _.map(this.data, datum => {
-      var cell = _.extend({}, datum, {row: curRow, col: curCol});
-      if (curRow === maxRows - 1) {
-        curRow = 0;
-        curCol += 1;
-      } else {
-        curRow += 1;
-      }
-      return cell;
-    });
-
-    var colors = ['green', 'orange', 'red'];
-    var gridSize = this.panel.gridSize || 50,
-        h = gridSize,
-        w = gridSize;
-
-    var svg = d3.select($el[0])
-      .append('svg')
-      .append('g');
-
-    var heatMap = svg.selectAll('.heatmap')
-      .data(cells, d => { return d.col + ':' + d.row; })
-      .enter().append('svg:rect')
-        .attr("x",       d => { return d.row * w;       })
-        .attr("y",       d => { return d.col * h;       })
-        .attr("width",   d => { return w;               })
-        .attr("height",  d => { return h;               })
-        .style("fill",   d => { return colors[d.state]; });
-
-    var tooltip;
-    var getToolTip = () => {
-      if (tooltip) { return tooltip; }
-      return tooltip = d3.select("body")
-        .append("div")
-        .attr("class", "grafana-tooltip")
-        .style("position", "absolute")
-        .style("z-index", "10");
-    };
-
-    var removeToolTip = () => {
-      if (!tooltip) { return; }
-      tooltip.remove();
-      tooltip = null;
-    };
-
+    var container = elem.find('.kpi-container');
+    var panel     = this.panel;
     var $location = this.$location;
     var $timeout  = this.$timeout;
-    heatMap
-      .on("mouseover", d => {return getToolTip().text(d.dashboard+': '+d.panel);})
-      .on("mousemove", d => {return getToolTip().style("top", (d3.event.pageY-15)+"px").style("left",(d3.event.pageX+20)+"px");})
-      .on("mouseout", d => {return removeToolTip();})
-      .on("click", d => { return $timeout(() => { removeToolTip(); $location.url(d.uri); }); });
 
-  };
+    var renderer = new KPIRenderer(container, panel, $location, $timeout);
+    this.events.on('render', () => {
+      renderer.render(this.data);
+      ctrl.renderingCompleted();
+    });
+    this.events.on('$destroy', () => {
+      renderer.remove();
+    });
+  }
 
 }
 
