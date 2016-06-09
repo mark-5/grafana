@@ -20,7 +20,7 @@ class KPITooltip {
     if (this.elem) { return this.elem; }
     return this.elem = d3.select("body")
       .append("div")
-      .attr("class", "grafana-tooltip")
+      .attr("class", "grafana-tooltip graph-tooltip")
       .style("position", "absolute")
       .style("z-index", "10");
   };
@@ -39,14 +39,23 @@ class KPITooltip {
     var cmp = d.thresholds.reversed ? 'min' : 'max';
     var metric = _[cmp](d.values, v => { return v.value; });
 
+    var table = [
+      ['Name', d.dashboard+' | '+d.panel],
+      ['State', states[d.state]],
+      ['Target', metric.target],
+      ['Thresholds', 'warning='+d.thresholds.warning+', '+'critical='+d.thresholds.critical],
+      ['Value', metric.value]
+    ];
+
     var template = _.template(''
-      + '<div class="graph-tooltip-list-item">Name: <%= d.dashboard %> | <%= d.panel %></div>'
-      + '<div class="graph-tooltip-list-item">State: <%= state %></div>'
-      + '<div class="graph-tooltip-list-item">Target: <%= metric.target %></div>'
-      + '<div class="graph-tooltip-list-item">Thresholds: warning=<%= d.thresholds.warning %>, critical=<%= d.thresholds.critical %></div>'
-      + '<div class="graph-tooltip-list-item">Value: <%= metric.value %></div>'
+      + '<% _.each(table, function(row) { %>'
+      +   '<div class="graph-tooltip-list-item">'
+      +     '<div class="graph-tooltip-series-name"><%= row[0] %></div>'
+      +     '<div class="graph-tooltip-value"><%= row[1] %></div>'
+      +   '</div>'
+      + '<% }) %>'
     );
-    return this.getElem().html(template({d: d, metric: metric, state: state}));
+    return this.getElem().html(template({table: table}));
   };
 
   onMouseover(d) {
