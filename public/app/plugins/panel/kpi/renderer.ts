@@ -1,8 +1,9 @@
 ///<reference path="../../../headers/common.d.ts" />
 ///<reference path="./d3.d.ts" />
 
+import $  from 'jquery';
+import _  from 'lodash';
 import d3 from './d3';
-import _ from 'lodash';
 
 class KPITooltip {
   $location: any;
@@ -31,8 +32,25 @@ class KPITooltip {
     }
   };
 
+  render(d) {
+    var states = ['OK', 'WARNING', 'CRITICAL'];
+    var state  = states[d.state];
+
+    var cmp = d.thresholds.reversed ? 'min' : 'max';
+    var metric = _[cmp](d.values, v => { return v.value; });
+
+    var template = _.template(''
+      + '<div class="graph-tooltip-list-item">Name: <%= d.dashboard %> | <%= d.panel %></div>'
+      + '<div class="graph-tooltip-list-item">State: <%= state %></div>'
+      + '<div class="graph-tooltip-list-item">Target: <%= metric.target %></div>'
+      + '<div class="graph-tooltip-list-item">Thresholds: warning=<%= d.thresholds.warning %>, critical=<%= d.thresholds.critical %></div>'
+      + '<div class="graph-tooltip-list-item">Value: <%= metric.value %></div>'
+    );
+    return this.getElem().html(template({d: d, metric: metric, state: state}));
+  };
+
   onMouseover(d) {
-    return this.getElem().text(d.dashboard+': '+d.panel);
+    return this.render(d);
   };
 
   onMousemove(d) {
@@ -61,52 +79,65 @@ class KPITooltip {
 export class KPIRenderer {
   colors = ['green', 'orange', 'red'];
 
-  root:  any;
-  panel: any;
+  root:   any;
   private tooltip: KPITooltip;
 
   $location: any;
   $timeout:  any;
 
-  constructor(root, panel, $location, $timeout) {
-    this.panel     = panel;
+  constructor(root, $location, $timeout) {
     this.root      = root;
     this.$location = $location;
     this.$timeout  = $timeout;
+
   };
 
-  render(data) {
-    this.remove();
+  distributeCells(data, height, width) {
+    var nearestRoot = Math.ceil(Math.sqrt(data.length));
+    var rows = Math.ceil(nearestRoot * (height / width));
+    var cols = Math.ceil(nearestRoot * (width  / height));
 
-    var maxRows = this.panel.maxRows;
     var curRow = 0, curCol = 0;
-
     var cells = _.map(data, datum => {
       var cell = _.extend({}, datum, {row: curRow, col: curCol});
-      if (curRow === maxRows - 1) {
-        curRow = 0;
-        curCol += 1;
-      } else {
+      if (curCol === cols - 1) {
+        curCol = 0;
         curRow += 1;
+      } else {
+        curCol += 1;
       }
       return cell;
     });
 
-    var h = this.panel.gridSize;
-    var w = this.panel.gridSize;
+    return {
+      cells: cells,
+      rows:  rows,
+      cols:  cols,
+      size:  Math.min((height / rows), (width / cols)),
+    };
+  };
+
+  render(data, height, width) {
+    var self = this;
+    this.remove();
+
+    var distribution = this.distributeCells(data, height, width);
+    var gridSize     = distribution.size;
     var colors = this.colors;
 
     var kpi = d3.select(this.root[0])
       .append('svg')
+        .attr('width',   d => { return '100%'; })
+        .attr('height',  d => { return '100%'; })
       .append('g')
       .selectAll('.heatmap')
-      .data(cells, d => { return d.col + ':' + d.row; })
+      .data(distribution.cells, d => { return d.col + ':' + d.row; })
       .enter().append('svg:rect')
-        .attr('x',       d => { return d.row * w;       })
-        .attr('y',       d => { return d.col * h;       })
-        .attr('width',   d => { return w;               })
-        .attr('height',  d => { return h;               })
-        .style('fill',   d => { return colors[d.state]; });
+        .attr('x',       d => { return d.col * gridSize; })
+        .attr('y',       d => { return d.row * gridSize; })
+        .attr('width',   d => { return gridSize;         })
+        .attr('height',  d => { return gridSize;         })
+        .style('fill',   d => { return colors[d.state];  });
 
     var tooltip = this.tooltip = new KPITooltip(this.$location, this.$timeout);
     kpi

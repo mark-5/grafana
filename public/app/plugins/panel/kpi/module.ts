@@ -30,7 +30,9 @@ class DashboardModel {
     var panels = this.panels = [];
     for (let row of dashboard['dashboard']['rows']) {
       for (let panel of row['panels']) {
-        panels.push(new PanelModel(panel));
+        var model = new PanelModel(panel);
+        if (!model.thresholds) { continue; }
+        panels.push(model);
       }
     }
   };
@@ -235,23 +237,27 @@ class KPICtrl extends PanelCtrl {
       var panel = _.find(dashboard.panels, {uid: result.panel});
       if (!panel) { continue; }
 
+      var panelState  = 0;
+      var panelValues = {};
+      for (let datum of result.data) {
+        if (!datum && datum.datapoints) { return; }
+          var value = _.last(datum.datapoints)[0];
+          var state = panel.getThresholdState(value);
+          if (!panelValues[panelState]) { panelValues[panelState] = []; }
+          panelValues[panelState] = {value: value, target: datum.target};
+          if (state > panelState) { panelState = state; }
+      }
+
       var scopedVars  = this.getScopedVars(panel, dashboard);
       var templateSrv = this.templateSrv;
-
-      for (let datum of result.data) {
-        if (!datum && datum.datapoints) { continue; }
-
-        var value = _.last(datum.datapoints)[0];
-        var state = panel.getThresholdState(value);
-        data.push({
-          dashboard: templateSrv.replace(dashboard.title, scopedVars),
-          panel:     templateSrv.replace(panel.title, scopedVars),
-          state:     state,
-          target:    datum.target,
-          uri:       dashboard.uri,
-          value:     value,
-        });
-      }
+      data.push({
+        dashboard:  templateSrv.replace(dashboard.title, scopedVars),
+        panel:      templateSrv.replace(panel.title, scopedVars),
+        state:      panelState,
+        values:     panelValues,
+        thresholds: _.clone(panel.thresholds),
+        uri:        dashboard.uri+'?panelId='+panel.id+'&fullscreen',
+      });
     }
 
     return data;
@@ -323,13 +329,17 @@ class KPICtrl extends PanelCtrl {
 
   link(scope, elem, attrs, ctrl) {
     var container = elem.find('.kpi-container');
-    var panel     = this.panel;
     var $location = this.$location;
     var $timeout  = this.$timeout;
 
-    var renderer = new KPIRenderer(container, panel, $location, $timeout);
+    var renderer = new KPIRenderer(container, $location, $timeout);
     this.events.on('render', () => {
-      renderer.render(this.data);
+      if (this.data) {
+        ctrl.calculatePanelHeight();
+        var height = this.containerHeight;
+        var width  = $(container[0]).width();
+        renderer.render(this.data, height, width);
+      }
       ctrl.renderingCompleted();
     });
     this.events.on('$destroy', () => {
