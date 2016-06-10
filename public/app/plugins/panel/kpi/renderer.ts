@@ -1,9 +1,9 @@
 ///<reference path="../../../headers/common.d.ts" />
-///<reference path="./d3.d.ts" />
+///<reference path="./lib/d3.d.ts" />
 
 import $  from 'jquery';
 import _  from 'lodash';
-import d3 from './d3';
+import d3 from './lib/d3';
 
 class KPITooltip {
   $location: any;
