@@ -18,11 +18,7 @@ class KPITooltip {
 
   getElem() {
     if (this.elem) { return this.elem; }
-    return this.elem = d3.select("body")
-      .append("div")
-      .attr("class", "grafana-tooltip graph-tooltip")
-      .style("position", "absolute")
-      .style("z-index", "10");
+    return this.elem = $('<div id="tooltip" class="graph-tooltip">');
   };
 
   removeElem() {
@@ -40,7 +36,7 @@ class KPITooltip {
     var metric = _[cmp](d.values, v => { return v.value; });
 
     var table = [
-      ['Name', d.dashboard+' | '+d.panel],
+      ['Name', d.panel],
       ['State', states[d.state]],
       ['Target', metric.target],
       ['Thresholds', 'warning='+d.thresholds.warning+', '+'critical='+d.thresholds.critical],
@@ -49,9 +45,9 @@ class KPITooltip {
 
     var template = _.template(''
       + '<% _.each(table, function(row) { %>'
-      +   '<div class="graph-tooltip-list-item">'
-      +     '<div class="graph-tooltip-series-name"><%= row[0] %></div>'
-      +     '<div class="graph-tooltip-value"><%= row[1] %></div>'
+      +   '<div class="kpi-list-item">'
+      +     '<div class="kpi-field-name"><%= row[0] %></div>'
+      +     '<div class="kpi-field-value"><%= row[1] %></div>'
       +   '</div>'
       + '<% }) %>'
     );
@@ -63,9 +59,7 @@ class KPITooltip {
   };
 
   onMousemove(d) {
-    return this.getElem()
-      .style('top',  (d3.event.pageY-15)+'px')
-      .style('left', (d3.event.pageX+20)+'px');
+    return this.getElem().place_tt(d3.event.pageX + 20, d3.event.pageY);
   };
 
   onMouseout(d) {

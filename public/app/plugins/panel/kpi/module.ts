@@ -6,6 +6,7 @@ import _ from 'lodash';
 import kbn from 'app/core/utils/kbn';
 import {KPIRenderer} from './renderer';
 import {PanelCtrl}   from 'app/plugins/sdk';
+import './css/styles.css!';
 
 class DashboardModel {
 
@@ -227,6 +228,14 @@ class KPICtrl extends PanelCtrl {
     this.interval   = kbn.calculateInterval(this.range, this.resolution);
   };
 
+  private lastNonNull(datapoints) {
+    for (let i = datapoints.length - 1; i >= 0; i--) {
+      var datapoint = datapoints[i];
+      if (!_.isNull(datapoint[0])) { return datapoint[0]; }
+    }
+    return null;
+  };
+
   private handleQueryResult(results) {
     var data = [];
 
@@ -241,7 +250,7 @@ class KPICtrl extends PanelCtrl {
       var panelValues = {};
       for (let datum of result.data) {
         if (!datum && datum.datapoints) { return; }
-          var value = _.last(datum.datapoints)[0];
+          var value = this.lastNonNull(datum.datapoints);
           var state = panel.getThresholdState(value);
           if (!panelValues[panelState]) { panelValues[panelState] = []; }
           panelValues[panelState] = {value: value, target: datum.target};
