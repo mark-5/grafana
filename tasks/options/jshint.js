@@ -18,7 +18,8 @@ module.exports = function(config) {
         'dist/*',
         'sample/*',
         '<%= srcDir %>/vendor/*',
-        '<%= srcDir %>/app/dashboards/*'
+        '<%= srcDir %>/app/dashboards/*',
+        '<%= srcDir %>/**/kpi/lib/**'
       ]
     }
   };

@@ -13,6 +13,7 @@
         "experimentalDecorators": true
     },
     "files": [
-        "public/app/**/*.ts"
+        "public/app/**/*.ts",
+        "public/plugins/**/*.ts"
     ]
 }
